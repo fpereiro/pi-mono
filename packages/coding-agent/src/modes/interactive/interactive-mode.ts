@@ -3942,6 +3942,12 @@ export class InteractiveMode {
 			return;
 		}
 
+		const newVersion = await this.checkForNewVersion();
+		if (!newVersion) {
+			this.showStatus(`pi is already up to date (v${this.version}).`);
+			return;
+		}
+
 		const instruction = getUpdateInstruction("@mariozechner/pi-coding-agent");
 		const match = instruction.match(/^Run:\s+(.+)$/);
 		if (!match) {
@@ -3952,13 +3958,7 @@ export class InteractiveMode {
 		}
 
 		const command = match[1].trim();
-		const confirmed = await this.showExtensionConfirm("Update pi", `Run this command?\n\n${command}`);
-		if (!confirmed) {
-			this.showStatus("Update cancelled");
-			return;
-		}
-
-		this.showStatus(`Updating pi: ${command}`);
+		this.showStatus(`Updating pi to v${newVersion}: ${command}`);
 
 		try {
 			const result = await this.session.executeBash(command, undefined, { excludeFromContext: true });
