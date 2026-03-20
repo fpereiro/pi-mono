@@ -2048,6 +2048,11 @@ export class InteractiveMode {
 				await this.handleReloadCommand();
 				return;
 			}
+			if (text === "/update") {
+				this.editor.setText("");
+				await this.handleUpdateCommand();
+				return;
+			}
 			if (text === "/debug") {
 				this.handleDebugCommand();
 				this.editor.setText("");
@@ -3920,6 +3925,65 @@ export class InteractiveMode {
 		} catch (error) {
 			dismissLoader(previousEditor as Component);
 			this.showError(`Reload failed: ${error instanceof Error ? error.message : String(error)}`);
+		}
+	}
+
+	private async handleUpdateCommand(): Promise<void> {
+		if (this.session.isStreaming) {
+			this.showWarning("Wait for the current response to finish before updating.");
+			return;
+		}
+		if (this.session.isCompacting) {
+			this.showWarning("Wait for compaction to finish before updating.");
+			return;
+		}
+		if (this.session.isBashRunning) {
+			this.showWarning("A bash command is already running. Press Esc to cancel it first.");
+			return;
+		}
+
+		const newVersion = await this.checkForNewVersion();
+		if (!newVersion) {
+			this.showStatus(`pi is already up to date (v${this.version}).`);
+			return;
+		}
+
+		const instruction = getUpdateInstruction("@mariozechner/pi-coding-agent");
+		const match = instruction.match(/^Run:\s+(.+)$/);
+		if (!match) {
+			this.showWarning(
+				"Auto-update is only supported for package-manager installs of pi. Please follow the startup update instructions manually.",
+			);
+			return;
+		}
+
+		const command = match[1].trim();
+		this.showStatus(`Updating pi to v${newVersion}: ${command}`);
+
+		try {
+			const result = await this.session.executeBash(command, undefined, { excludeFromContext: true });
+			if (result.cancelled) {
+				this.showWarning("Update cancelled");
+				return;
+			}
+			if (result.exitCode !== 0) {
+				this.showError(`Update failed with exit code ${result.exitCode ?? "unknown"}`);
+				return;
+			}
+
+			this.chatContainer.addChild(new Spacer(1));
+			this.chatContainer.addChild(
+				new Text(
+					`${theme.fg("accent", "✓ pi updated")}\n${theme.fg("muted", "Open pi again to use the updated version.")}`,
+					1,
+					0,
+				),
+			);
+			this.ui.requestRender();
+			await new Promise((resolve) => setTimeout(resolve, 150));
+			await this.shutdown();
+		} catch (error) {
+			this.showError(`Update failed: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 
